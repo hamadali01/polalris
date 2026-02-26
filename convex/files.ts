@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { cp } from "fs";
 import { th } from "date-fns/locale";
 
@@ -34,6 +34,32 @@ export const getFile = query({
         if (!project) throw new Error("Project not found");
         if (project.ownerId !== identity.subject) throw new Error("Not authorized to access this project");
         return file
+    }
+})
+
+export const getFilePath = query({
+    args: { id: v.id("files") },
+    handler: async (ctx, args) => {
+        const identity = await verifyAuth(ctx)
+
+        const file = await ctx.db.get("files", args.id);
+
+        if (!file) throw new Error("File not found");
+
+        const project = await ctx.db.get("projects", file.projectId)
+        if (!project) throw new Error("Project not found");
+        if (project.ownerId !== identity.subject) throw new Error("Not authorized to access this project");
+        
+        const path: { name: string; _id: string }[] = [];
+        let currenntId: Id<"files"> | undefined = args.id;
+
+        while (currenntId) {
+            const file = (await ctx.db.get("files", currenntId)) as Doc<"files"> | undefined;
+            if (!file) break;
+            path.unshift({ name: file.name, _id: file._id }); // Insert at beginning of array
+            currenntId = file.parentId;
+        };
+        return path;
     }
 })
 
